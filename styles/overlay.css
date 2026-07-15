@@ -45,7 +45,10 @@
   transform: translateY(-1px);
   border-color: #33a3ff;
 }
-#aquaai-wrap .aquaai-drop { font-size: 14px; }
+#aquaai-wrap .aquaai-drop { display: inline-flex; color: #33a3ff; }
+#aquaai-wrap .aquaai-ico { width: 15px; height: 15px; display: block; }
+#aquaai-wrap .aquaai-head-title { display: inline-flex; align-items: center; gap: 7px; }
+#aquaai-wrap .aquaai-head-title .aquaai-ico { width: 16px; height: 16px; color: #33a3ff; }
 /* When there's no number yet, the bar collapses to a neat icon-only circle. */
 #aquaai-wrap #aquaai-bar-summary:empty { display: none; }
 

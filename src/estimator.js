@@ -44,7 +44,8 @@
     BASE_ML_PER_QUERY: 5,      // fixed cooling/overhead per request (mL)
     ML_PER_1K_TOKENS: 30,      // marginal water per 1000 generated tokens (mL)
     CHARS_PER_TOKEN: 4,        // rough tokenizer approximation
-    ASSUMED_TOKENS_WHEN_UNKNOWN: 300 // used when response length can't be read
+    ASSUMED_TOKENS_WHEN_UNKNOWN: 300, // used when response length can't be read
+    DAILY_GOAL_ML: 5000        // "budget" used for the Today donut (5 L)
   });
 
   /**
@@ -96,6 +97,18 @@
   }
 
   /**
+   * Split a volume into a number string and its unit, for UIs that style the
+   * value and unit differently (e.g. "18.7" + "mL", "2.43" + "Liters").
+   * @param {number} ml
+   * @returns {{value:string, unit:string}}
+   */
+  function splitVolume(ml) {
+    if (!isFinite(ml) || ml < 0) ml = 0;
+    if (ml < 1000) return { value: ml < 100 ? ml.toFixed(1) : String(Math.round(ml)), unit: "mL" };
+    return { value: (ml / 1000).toFixed(2), unit: "Liters" };
+  }
+
+  /**
    * A relatable comparison for a cumulative volume.
    * @param {number} ml
    * @returns {string}
@@ -113,6 +126,7 @@
     estimateTokens,
     estimateWater,
     formatVolume,
+    splitVolume,
     relatableEquivalent
   };
 })();

@@ -29,12 +29,25 @@
   const counted = new Set();           // message ids already counted (persisted)
   const finalizeTimers = new Map();    // message id -> debounce timer
   const STREAM_IDLE_MS = 1200;         // "response finished" heuristic
-  const BOOT_WINDOW_MS = 4000;         // messages seen this soon after load are
-                                       // treated as EXISTING history, not new
-                                       // queries (so they hit all-time, not today)
-  let bootAt = Date.now();             // reset on each conversation switch
   let writeChain = Promise.resolve();  // serialises storage read-modify-writes
-  let inFlight = false;
+
+  // --- Live vs. history classification -----------------------------------
+  // A response counts toward "Today" ONLY if we actually observed the user
+  // send that prompt (network hook or a keypress/click on the composer).
+  // Everything else — history rendered on load, or a conversation you open
+  // later — counts toward all-time only. This is what stops a chat with 30
+  // old messages from dumping all 30 into "today" when you send one prompt.
+  const ARM_TTL_MS = 120000;           // an armed send expires if no reply lands
+  let armedAt = 0;
+
+  function armLive() { armedAt = Date.now(); }
+  function consumeLive() {
+    if (armedAt && Date.now() - armedAt < ARM_TTL_MS) {
+      armedAt = 0;
+      return true;
+    }
+    return false;
+  }
 
   // ---------------------------------------------------------------------
   // Main-world injection + signal bridge
@@ -56,10 +69,40 @@
     const data = event.data;
     if (!data || data.__aquaai !== true) return;
     if (data.type === "QUERY_SENT") {
-      inFlight = true;
+      armLive();
       UI.setCalculating(true);
     }
   });
+
+  // Fallback signal in case the main-world network hook is blocked: detect the
+  // user submitting a prompt from the composer directly in the isolated world.
+  function looksLikeComposer(node) {
+    if (!node || !node.closest) return false;
+    return !!node.closest('#prompt-textarea, form[data-type="unified-composer"], main form');
+  }
+  document.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key === "Enter" && !e.shiftKey && looksLikeComposer(e.target)) {
+        armLive();
+        UI.setCalculating(true);
+      }
+    },
+    true
+  );
+  document.addEventListener(
+    "click",
+    (e) => {
+      const btn = e.target && e.target.closest
+        ? e.target.closest('button[data-testid="send-button"], button[aria-label*="Send" i]')
+        : null;
+      if (btn) {
+        armLive();
+        UI.setCalculating(true);
+      }
+    },
+    true
+  );
 
   // ---------------------------------------------------------------------
   // Storage helpers
@@ -150,11 +193,9 @@
 
       const text = (node.innerText || "").trim();
       const result = Estimator.estimateWater({ responseText: text, config: config });
-      inFlight = false;
       UI.setCalculating(false);
-      // Messages that surface within the boot window are pre-existing history
-      // still rendering — count them toward all-time, not toward "today".
-      const live = Date.now() - bootAt > BOOT_WINDOW_MS;
+      // Live only if we saw the user send this prompt; otherwise it's history.
+      const live = consumeLive();
       recordEvents([{ id: id, result: result }], live);
     }, STREAM_IDLE_MS);
     finalizeTimers.set(id, timer);
@@ -186,16 +227,21 @@
   }
 
   // ---------------------------------------------------------------------
-  // "Scan recent chats" — drive ChatGPT's own sidebar to backfill many
-  // conversations at once. Triggered by a message from the popup.
+  // "Scan my chats" — runs entirely in the background via ChatGPT's own
+  // backend API using YOUR logged-in session. No tab-hopping, no UI hijack,
+  // and it paginates through EVERY conversation (not just the visible list).
   //
-  // This is inherently a bit fragile: it clicks ChatGPT's UI, so a redesign
-  // of the sidebar could break it. Selectors are kept here for easy fixing.
+  // Fragility note: these are ChatGPT's private/unofficial endpoints, so a
+  // backend change could break the scan. They're grouped here for easy fixing.
+  // Nothing leaves your browser — data is read only to compute local totals.
   // ---------------------------------------------------------------------
-  const SCAN = {
-    sidebarLink: 'nav a[href^="/c/"], a[href^="/c/"]',
-    sidebarScroll: "nav"
+  const API = {
+    session: "/api/auth/session",
+    list: (offset, limit) =>
+      `/backend-api/conversations?offset=${offset}&limit=${limit}&order=updated`,
+    detail: (id) => `/backend-api/conversation/${id}`
   };
+  const LIST_PAGE = 28;
   let scanning = false;
 
   function wait(ms) {
@@ -206,61 +252,95 @@
     try { chrome.runtime.sendMessage(msg); } catch (_) {}
   }
 
-  function collectChatHrefs() {
-    const seen = new Set();
-    const hrefs = [];
-    document.querySelectorAll(SCAN.sidebarLink).forEach((a) => {
-      const href = a.getAttribute("href");
-      if (href && href.indexOf("/c/") === 0 && !seen.has(href)) {
-        seen.add(href);
-        hrefs.push(href);
-      }
-    });
-    return hrefs;
+  async function getAccessToken() {
+    const r = await fetch(API.session, { credentials: "include" });
+    if (!r.ok) throw new Error("auth session HTTP " + r.status);
+    const j = await r.json();
+    if (!j || !j.accessToken) throw new Error("not signed in to ChatGPT");
+    return j.accessToken;
   }
 
-  async function waitForConversation(href, timeoutMs) {
-    const deadline = Date.now() + (timeoutMs || 6000);
-    while (Date.now() < deadline) {
-      const arrived = location.pathname.indexOf(href) !== -1;
-      const hasMsg = document.querySelector(SELECTORS.assistantMessage);
-      if (arrived && hasMsg) return true;
-      await wait(200);
+  async function listAllConversationIds(token, onProgress) {
+    const ids = [];
+    let offset = 0;
+    let total = Infinity;
+    while (offset < total) {
+      const r = await fetch(API.list(offset, LIST_PAGE), {
+        headers: { Authorization: "Bearer " + token },
+        credentials: "include"
+      });
+      if (!r.ok) throw new Error("list HTTP " + r.status);
+      const j = await r.json();
+      const items = j.items || [];
+      total = typeof j.total === "number" ? j.total : offset + items.length;
+      items.forEach((it) => it && it.id && ids.push(it.id));
+      offset += LIST_PAGE;
+      onProgress && onProgress(ids.length, total);
+      if (!items.length) break;
+      await wait(120); // be gentle on the API
     }
-    return false;
+    return ids;
+  }
+
+  async function assistantMessagesOf(token, id) {
+    const r = await fetch(API.detail(id), {
+      headers: { Authorization: "Bearer " + token },
+      credentials: "include"
+    });
+    if (!r.ok) return [];
+    const j = await r.json();
+    const mapping = (j && j.mapping) || {};
+    const out = [];
+    for (const key in mapping) {
+      const m = mapping[key] && mapping[key].message;
+      if (!m || !m.author || m.author.role !== "assistant") continue;
+      const c = m.content;
+      if (!c || (c.content_type && c.content_type !== "text")) continue;
+      const text = (c.parts || []).filter((p) => typeof p === "string").join("\n").trim();
+      if (!text || !m.id) continue;
+      out.push({ id: m.id, text: text });
+    }
+    return out;
   }
 
   async function runScan() {
     if (scanning) return;
     scanning = true;
     try {
-      // Load more of the list by scrolling the sidebar a few times.
-      const nav = document.querySelector(SCAN.sidebarScroll);
-      for (let i = 0; i < 6 && nav; i++) {
-        nav.scrollTop = nav.scrollHeight;
-        await wait(400);
-      }
+      broadcast({ type: "AQUAAI_SCAN_PROGRESS", phase: "auth", done: 0, total: 0 });
+      const token = await getAccessToken();
 
-      const hrefs = collectChatHrefs();
+      const ids = await listAllConversationIds(token, (n, t) =>
+        broadcast({ type: "AQUAAI_SCAN_PROGRESS", phase: "list", done: n, total: t })
+      );
+
       let done = 0;
-      broadcast({ type: "AQUAAI_SCAN_PROGRESS", done: done, total: hrefs.length });
+      const total = ids.length;
+      broadcast({ type: "AQUAAI_SCAN_PROGRESS", phase: "read", done: done, total: total });
 
-      for (const href of hrefs) {
-        let link;
-        try { link = document.querySelector('a[href="' + CSS.escape(href) + '"]'); }
-        catch (_) { link = null; }
-        if (link) {
-          link.click();                         // SPA navigation
-          await waitForConversation(href);
-          bootAt = Date.now();                  // count as history, not "today"
-          backfillExisting();
-          await wait(700);                       // let long threads finish rendering
-          backfillExisting();                    // catch late rows
+      for (const id of ids) {
+        try {
+          const msgs = await assistantMessagesOf(token, id);
+          const events = [];
+          for (const m of msgs) {
+            if (counted.has(m.id)) continue;
+            counted.add(m.id);
+            events.push({
+              id: m.id,
+              result: Estimator.estimateWater({ responseText: m.text, config: config })
+            });
+          }
+          recordEvents(events, false); // scanned history → all-time only
+        } catch (_) {
+          /* skip a conversation that fails to load */
         }
         done++;
-        broadcast({ type: "AQUAAI_SCAN_PROGRESS", done: done, total: hrefs.length });
+        broadcast({ type: "AQUAAI_SCAN_PROGRESS", phase: "read", done: done, total: total });
+        await wait(100);
       }
-      broadcast({ type: "AQUAAI_SCAN_DONE", total: hrefs.length });
+      broadcast({ type: "AQUAAI_SCAN_DONE", total: total });
+    } catch (e) {
+      broadcast({ type: "AQUAAI_SCAN_ERROR", error: String((e && e.message) || e) });
     } finally {
       scanning = false;
     }
@@ -321,21 +401,24 @@
     function build() {
       root = document.createElement("div");
       root.id = "aquaai-wrap";
+      const drop = `<svg class="aquaai-ico" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>`;
       root.innerHTML = `
         <div id="aquaai-panel" role="dialog" aria-label="Water footprint details">
           <div class="aquaai-panel-head">
-            <span>💧 Water Footprint</span>
+            <span class="aquaai-head-title">${drop} Water Footprint</span>
             <button id="aquaai-close" aria-label="Close">×</button>
           </div>
-          <div class="aquaai-row"><span>Last query</span><b id="aquaai-last">–</b></div>
+          <div class="aquaai-row"><span>This prompt</span><b id="aquaai-last">–</b></div>
           <div class="aquaai-row"><span>Today</span><b id="aquaai-today">–</b></div>
-          <div class="aquaai-row"><span>All time</span><b id="aquaai-total">–</b></div>
+          <div class="aquaai-row"><span>Lifetime</span><b id="aquaai-total">–</b></div>
           <div class="aquaai-note" id="aquaai-equiv">Send a prompt to see its water cost.</div>
           <div class="aquaai-disclaimer">Estimate only — based on public research
             (Li et&nbsp;al., 2023). Actual usage varies by model, data center &amp; grid.</div>
         </div>
         <button id="aquaai-bar" title="AquaAI water footprint — click for details">
-          <span class="aquaai-drop">💧</span>
+          <span class="aquaai-drop">${drop}</span>
           <span id="aquaai-bar-summary"></span>
         </button>`;
 
@@ -428,7 +511,7 @@
     setInterval(() => {
       if (location.href === currentUrl) return;
       currentUrl = location.href;
-      bootAt = Date.now();
+      armedAt = 0; // a conversation switch is not a live prompt you just sent
       backfillExisting();
       setTimeout(backfillExisting, 1500);
     }, 800);

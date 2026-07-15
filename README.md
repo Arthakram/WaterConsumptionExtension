@@ -10,20 +10,34 @@ query, to raise awareness of AI's environmental impact.
 
 1. **Detects** interactions on `chatgpt.com` / `chat.openai.com`.
 2. **Estimates** water per query from response length and a research-based model.
-3. **Displays** a small 💧 icon docked on the prompt bar (click to expand
-   Last / Today / All-time details).
+3. **Displays** a small water-drop icon docked on the prompt bar (click to
+   expand This-prompt / Today / Lifetime details).
 4. **Tracks** cumulative usage (per-day + all-time) in `chrome.storage.local`,
-   with a toolbar badge and a popup dashboard.
-5. **Backfills history**: on load it tallies the messages already in the open
-   conversation into your all-time total, de-duplicated by message id so
-   reloads never double-count. Each conversation is added the first time you
-   open it.
+   with a toolbar badge and a popup dashboard (donut goal + weekly line chart).
+5. **Backfills history**: on load it tallies the open conversation, and the
+   **Scan** button reads *all* your conversations in the background.
 
-> **Scope of "total":** ChatGPT only loads the *currently open* conversation
-> into the page, so the extension can only count conversations you actually
-> open — there is no public API to read your entire account history at once.
-> Backfilled history counts toward **All-time**, not **Today** (its real date
-> isn't reliably available in the DOM).
+### Live vs. history (why "Today" stays honest)
+
+A response counts toward **Today** only if the extension actually observed you
+send that prompt — detected via the network hook (`injected.js`) with a
+keypress/click fallback. Anything else (history rendered on load, a chat you
+open later, a background scan) counts toward **Lifetime** only. This is what
+stops a chat with 30 old messages from dumping all 30 into "today" when you
+send a single new prompt.
+
+### Background scan
+
+The **Scan my ChatGPT history** button (popup) messages the content script,
+which calls ChatGPT's own backend using your logged-in session:
+`/api/auth/session` for a token, then paginates `/backend-api/conversations`
+and reads each `/backend-api/conversation/<id>`. It runs invisibly (no
+tab-hopping) and covers **every** conversation, not just the visible sidebar.
+
+> These are ChatGPT's private/unofficial endpoints, so a backend change could
+> break the scan. Nothing leaves your browser — data is read only to compute
+> local totals. Scanned messages are de-duplicated by message id, so scanning
+> repeatedly is safe.
 
 ## Architecture
 

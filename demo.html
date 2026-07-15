@@ -43,7 +43,7 @@
 <body>
   <div class="fake-chat">
     <div class="banner">
-      🧪 <b>AquaAI demo</b> — the small 💧 icon docks on the prompt bar. On load
+      <b>AquaAI demo</b> — the small water-drop icon docks on the prompt bar. On load
       it <b>backfills the existing conversation</b> below into your all-time
       total (like the real extension does with your ChatGPT history). Send a new
       prompt to watch it grow; click the icon for the breakdown.
@@ -77,7 +77,7 @@
       root.id = "aquaai-wrap";
       root.innerHTML = `
         <div id="aquaai-panel" role="dialog">
-          <div class="aquaai-panel-head"><span>💧 Water Footprint</span>
+          <div class="aquaai-panel-head"><span class="aquaai-head-title"><svg class="aquaai-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg> Water Footprint</span>
             <button id="aquaai-close">×</button></div>
           <div class="aquaai-row"><span>Last query</span><b id="aquaai-last">–</b></div>
           <div class="aquaai-row"><span>Today</span><b id="aquaai-today">–</b></div>
@@ -87,7 +87,9 @@
             (Li et&nbsp;al., 2023). Actual usage varies by model, data center &amp; grid.</div>
         </div>
         <button id="aquaai-bar" title="AquaAI water footprint — click for details">
-          <span class="aquaai-drop">💧</span>
+          <span class="aquaai-drop"><svg class="aquaai-ico" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            aria-hidden="true"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg></span>
           <span id="aquaai-bar-summary"></span>
         </button>`;
       const form = document.getElementById("demo-composer");

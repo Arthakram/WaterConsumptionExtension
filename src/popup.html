@@ -8,68 +8,129 @@
 </head>
 <body>
   <header class="head">
-    <span class="drop">💧</span>
-    <div>
-      <h1>AquaAI</h1>
-      <p class="sub">ChatGPT water footprint</p>
+    <span class="logo">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <defs>
+          <linearGradient id="agrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#6cb6ff" />
+            <stop offset="1" stop-color="#2563eb" />
+          </linearGradient>
+        </defs>
+        <path d="M12 2.5l6.4 6.4a9 9 0 1 1-12.8 0z" fill="url(#agrad)" />
+      </svg>
+    </span>
+    <div class="head-text">
+      <h1>Aqua<span>AI</span></h1>
+      <p>ChatGPT Water Footprint</p>
     </div>
+    <button id="settings-toggle" class="icon-btn" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
+        <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
+        <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
+        <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" />
+        <line x1="17" y1="16" x2="23" y2="16" />
+      </svg>
+    </button>
   </header>
 
-  <section class="cards">
-    <div class="card">
-      <div class="card-label">Today</div>
-      <div class="card-value" id="today">–</div>
+  <!-- This prompt -->
+  <div class="card row">
+    <div>
+      <div class="card-label">This Prompt</div>
+      <div class="stat"><span class="stat-num" id="prompt-val">–</span><span class="stat-unit" id="prompt-unit"></span></div>
+    </div>
+    <span class="badge-ico blue">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+      </svg>
+    </span>
+  </div>
+
+  <!-- Today's usage + donut -->
+  <div class="card row">
+    <div>
+      <div class="card-label">Today's Usage</div>
+      <div class="stat"><span class="stat-num" id="today-val">–</span><span class="stat-unit" id="today-unit"></span></div>
       <div class="card-foot" id="today-queries">0 queries</div>
     </div>
-    <div class="card">
-      <div class="card-label">All time</div>
-      <div class="card-value" id="total">–</div>
+    <svg class="donut" viewBox="0 0 64 64" aria-hidden="true">
+      <circle class="donut-track" cx="32" cy="32" r="27" />
+      <circle class="donut-arc" id="donut-arc" cx="32" cy="32" r="27" />
+      <text class="donut-pct" id="donut-pct" x="32" y="33">0%</text>
+    </svg>
+  </div>
+
+  <!-- Weekly trend line chart -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-label">Weekly Trend</div>
+      <span class="trend-delta" id="trend-delta"></span>
+    </div>
+    <svg class="trend" id="trend" viewBox="0 0 300 96" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="fillgrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#3b82f6" stop-opacity="0.32" />
+          <stop offset="1" stop-color="#3b82f6" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      <path id="trend-area" fill="url(#fillgrad)" stroke="none" />
+      <path id="trend-line" fill="none" stroke="#2563eb" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+    </svg>
+    <div class="trend-labels" id="trend-labels"></div>
+  </div>
+
+  <!-- Lifetime -->
+  <div class="card row">
+    <div>
+      <div class="card-label">Lifetime Footprint</div>
+      <div class="stat"><span class="stat-num" id="total-val">–</span><span class="stat-unit" id="total-unit"></span></div>
       <div class="card-foot" id="total-queries">0 queries</div>
     </div>
-  </section>
+    <span class="badge-ico green">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" />
+        <path d="M2 21c0-3 1.85-5.36 5.08-6" />
+      </svg>
+    </span>
+  </div>
 
-  <div class="equiv" id="equiv"></div>
+  <p class="tagline">Saving water. One prompt at a time.</p>
 
-  <section class="last">
-    <span>Last query</span>
-    <b id="last">–</b>
-  </section>
+  <button id="scan" class="btn-primary">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+    </svg>
+    <span>Scan my ChatGPT history</span>
+  </button>
+  <p class="scan-status" id="scan-status">
+    Reads your conversations in the background to build your lifetime total.
+  </p>
 
-  <details class="settings">
-    <summary>Model settings</summary>
-    <p class="hint">
-      Estimation factors. Defaults follow public research
-      (Li et&nbsp;al., 2023). These are assumptions — tune as needed.
-    </p>
-    <label>
-      Base water per query (mL)
-      <input type="number" id="cfg-base" min="0" step="0.5" />
-    </label>
-    <label>
-      Water per 1,000 tokens (mL)
-      <input type="number" id="cfg-perk" min="0" step="1" />
-    </label>
+  <!-- Settings (hidden by default) -->
+  <section class="settings" id="settings" hidden>
+    <p class="hint">Estimation factors — defaults follow public research
+      (Li et&nbsp;al., 2023). These are assumptions; tune as needed.</p>
+    <label>Base water per query (mL)
+      <input type="number" id="cfg-base" min="0" step="0.5" /></label>
+    <label>Water per 1,000 tokens (mL)
+      <input type="number" id="cfg-perk" min="0" step="1" /></label>
+    <label>Daily goal (mL) — used for the donut
+      <input type="number" id="cfg-goal" min="100" step="100" /></label>
     <div class="btn-row">
-      <button id="save" class="primary">Save</button>
-      <button id="reset-cfg" class="ghost">Defaults</button>
+      <button id="save" class="btn-primary sm">Save</button>
+      <button id="reset-cfg" class="btn-ghost sm">Defaults</button>
     </div>
-    <p class="saved" id="saved-msg" hidden>Saved ✓</p>
-  </details>
-
-  <section class="scan">
-    <button id="scan" class="primary wide">↻ Scan my recent chats</button>
-    <p class="scan-status" id="scan-status">
-      Opens each conversation in your ChatGPT sidebar and adds it to your
-      all-time total. Keep the ChatGPT tab open while it runs.
-    </p>
+    <p class="saved" id="saved-msg" hidden>Saved</p>
+    <button id="reset-stats" class="btn-danger">Reset all data</button>
+    <p class="disclaimer">Figures are estimates only and do not represent exact water usage.</p>
   </section>
-
-  <footer class="foot">
-    <button id="reset-stats" class="danger">Reset all data</button>
-    <p class="disclaimer">
-      Figures are estimates only and do not represent exact water usage.
-    </p>
-  </footer>
 
   <script src="estimator.js"></script>
   <script src="popup.js"></script>
